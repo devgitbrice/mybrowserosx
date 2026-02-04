@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var jeuEstActif = true
     @State private var sidebarVisible = false
     @State private var afficherBlocNotes = false
+    @State private var blocNotesVerrouille = false
     
     let minuteur = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
 
@@ -121,15 +122,35 @@ struct ContentView: View {
                 LearnView(onUnlock: { estBloque = false }).zIndex(4)
             }
             
-            // --- COUCHE 6 : BLOC-NOTES ---
+            // --- COUCHE 6 : DÉTECTEUR BORD DROIT (BLOC-NOTES) ---
+            if !afficherBlocNotes {
+                HStack {
+                    Spacer()
+                    Rectangle().fill(Color.clear).frame(width: 6)
+                        .contentShape(Rectangle())
+                        .onHover { isHovering in
+                            if isHovering {
+                                withAnimation(.spring()) { afficherBlocNotes = true }
+                            }
+                        }
+                }
+                .zIndex(5)
+            }
+
+            // --- COUCHE 7 : BLOC-NOTES ---
             if afficherBlocNotes {
-                BlocNotesView(notesManager: notesManager, estVisible: $afficherBlocNotes)
+                BlocNotesView(notesManager: notesManager, estVisible: $afficherBlocNotes, estVerrouille: $blocNotesVerrouille)
                     .padding(20)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     .zIndex(100)
                     #if os(macOS)
                     .frame(width: 500)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .onHover { isHovering in
+                        if !isHovering && !blocNotesVerrouille {
+                            withAnimation(.spring()) { afficherBlocNotes = false }
+                        }
+                    }
                     #else
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black.opacity(0.5))
