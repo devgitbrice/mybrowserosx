@@ -39,9 +39,11 @@ struct ExerciseManagerView: View {
         }
         .navigationTitle("Bibliothèque \(currentProfileName) 📚") // Titre dynamique
         .toolbar {
-            Button(action: { showAddSheet = true }) {
-                Image(systemName: "plus.circle.fill")
-                Text("Ajouter")
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showAddSheet = true }) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Ajouter")
+                }
             }
         }
         .sheet(isPresented: $showAddSheet) {
