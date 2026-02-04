@@ -100,10 +100,15 @@ public class NotesManager: ObservableObject {
         let newIndex = minIndex - 1
         let catParDefaut = filtreCategorie ?? "À catégoriser"
         let newNote = NoteBlock(id: UUID(), content: "Nouvelle note...", order_index: newIndex, category: catParDefaut)
-        
+
         withAnimation { blocks.insert(newNote, at: 0) }
-        ajouterNoteBase(note: newNote)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.chargerNotes() }
+        ajouterNoteBase(note: newNote) { [weak self] success in
+            if success {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self?.chargerNotes()
+                }
+            }
+        }
     }
     
     func ajouterNoteDepuisLien(url: URL) {
@@ -132,8 +137,11 @@ public class NotesManager: ObservableObject {
         }
     }
     
-    private func ajouterNoteBase(note: NoteBlock) {
-        guard let url = URL(string: "\(Config.url)/rest/v1/site_notes_blocks") else { return }
+    private func ajouterNoteBase(note: NoteBlock, completion: ((Bool) -> Void)? = nil) {
+        guard let url = URL(string: "\(Config.url)/rest/v1/site_notes_blocks") else {
+            completion?(false)
+            return
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("Bearer \(Config.key)", forHTTPHeaderField: "Authorization")
@@ -141,8 +149,20 @@ public class NotesManager: ObservableObject {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("return=minimal", forHTTPHeaderField: "Prefer")
         let donnees: [String: Any] = ["id": note.id!.uuidString, "content": note.content, "order_index": note.order_index, "is_pinned": note.is_pinned, "is_favorite": note.is_favorite, "category": note.category]
-        do { request.httpBody = try JSONSerialization.data(withJSONObject: donnees, options: []) } catch {}
-        URLSession.shared.dataTask(with: request).resume()
+        do { request.httpBody = try JSONSerialization.data(withJSONObject: donnees, options: []) } catch {
+            completion?(false)
+            return
+        }
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            let httpResponse = response as? HTTPURLResponse
+            let success = error == nil && (httpResponse?.statusCode ?? 0) >= 200 && (httpResponse?.statusCode ?? 0) < 300
+            if !success {
+                print("❌ Erreur création note: status=\(httpResponse?.statusCode ?? -1), error=\(error?.localizedDescription ?? "aucune")")
+            }
+            DispatchQueue.main.async {
+                completion?(success)
+            }
+        }.resume()
     }
     
     private func resumerEtMettreAJour(id: UUID, url: URL, rawText: String) async {
