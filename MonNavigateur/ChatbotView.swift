@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Modele de message
 struct ChatMessage: Identifiable {
@@ -43,7 +44,6 @@ class ChatbotService: ObservableObject {
         request.addValue("Bearer \(cleChatGPT)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Construire l'historique des messages pour le contexte
         var messagesAPI: [[String: String]] = [
             ["role": "system", "content": "Tu es un assistant utile et amical. Reponds en francais."]
         ]
@@ -109,7 +109,6 @@ class ChatbotService: ObservableObject {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Construire l'historique pour Gemini
         var contenus: [[String: Any]] = []
         for msg in messages {
             contenus.append([
@@ -175,7 +174,176 @@ class ChatbotService: ObservableObject {
     }
 }
 
-// MARK: - Vue Chatbot
+// MARK: - En-tete du chatbot
+struct ChatbotEnTete: View {
+    let onEffacer: () -> Void
+    let onFermer: () -> Void
+
+    var body: some View {
+        HStack {
+            Image(systemName: "cpu")
+                .font(.title2)
+                .foregroundColor(.cyan)
+            Text("ROBOT")
+                .font(.headline)
+                .foregroundColor(.white)
+            Spacer()
+            Button(action: onEffacer) {
+                Image(systemName: "trash").foregroundColor(.gray)
+            }
+            .buttonStyle(.plain)
+            .help("Effacer la conversation")
+            Button(action: onFermer) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.gray)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.black.opacity(0.3))
+    }
+}
+
+// MARK: - Selecteur de modele
+struct ChatbotSelecteurModele: View {
+    @Binding var modeleChoisi: ModeleIA
+    let onChangement: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(ModeleIA.allCases, id: \.self) { modele in
+                boutonModele(modele)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func boutonModele(_ modele: ModeleIA) -> some View {
+        let estActif = modeleChoisi == modele
+        let icone = modele == .chatgpt ? "brain" : "sparkles"
+        let couleurActive: Color = modele == .chatgpt ? .green : .cyan
+        let fondActif: Color = modele == .chatgpt ? Color.green.opacity(0.3) : Color.blue.opacity(0.3)
+        let bordureActive: Color = modele == .chatgpt ? Color.green.opacity(0.5) : Color.cyan.opacity(0.5)
+
+        return Button(action: {
+            modeleChoisi = modele
+            onChangement()
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: icone).font(.caption)
+                Text(modele.rawValue).font(.caption).fontWeight(.medium)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(estActif ? fondActif : Color.white.opacity(0.05))
+            .foregroundColor(estActif ? couleurActive : .gray)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(estActif ? bordureActive : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Zone de messages
+struct ChatbotMessagesZone: View {
+    let messages: [ChatMessage]
+    let enChargement: Bool
+    let modeleChoisi: ModeleIA
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if messages.isEmpty {
+                        placeholderVide
+                    }
+                    ForEach(messages) { message in
+                        BulleMessage(message: message, modele: modeleChoisi)
+                            .id(message.id)
+                    }
+                    if enChargement {
+                        indicateurChargement
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            }
+            .onChange(of: messages.count) { _ in
+                withAnimation {
+                    if let dernier = messages.last {
+                        proxy.scrollTo(dernier.id, anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    private var placeholderVide: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 40))
+                .foregroundColor(.gray.opacity(0.4))
+            Text("Posez une question a \(modeleChoisi.rawValue)")
+                .font(.subheadline)
+                .foregroundColor(.gray.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 60)
+    }
+
+    private var indicateurChargement: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .scaleEffect(0.7)
+                .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+            Text("\(modeleChoisi.rawValue) reflechit...")
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .id("chargement")
+    }
+}
+
+// MARK: - Zone de saisie
+struct ChatbotSaisie: View {
+    @Binding var texteInput: String
+    let enChargement: Bool
+    let onEnvoyer: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            TextField("Ecrivez votre message...", text: $texteInput)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .background(Color.white.opacity(0.08))
+                .cornerRadius(10)
+                .foregroundColor(.white)
+                .onSubmit { onEnvoyer() }
+
+            Button(action: onEnvoyer) {
+                Image(systemName: "paperplane.fill")
+                    .font(.title3)
+                    .foregroundColor(texteInput.isEmpty ? .gray : .cyan)
+                    .rotationEffect(.degrees(45))
+            }
+            .buttonStyle(.plain)
+            .disabled(texteInput.isEmpty || enChargement)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+}
+
+// MARK: - Vue Chatbot principale
 struct ChatbotView: View {
     @StateObject private var service = ChatbotService()
     @State private var texteInput = ""
@@ -184,157 +352,31 @@ struct ChatbotView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // --- EN-TETE ---
-            HStack {
-                Image(systemName: "cpu")
-                    .font(.title2)
-                    .foregroundColor(.cyan)
+            ChatbotEnTete(
+                onEffacer: { service.effacerConversation() },
+                onFermer: { withAnimation(.spring()) { estVisible = false } }
+            )
 
-                Text("ROBOT")
-                    .font(.headline)
-                    .foregroundColor(.white)
-
-                Spacer()
-
-                // Bouton effacer
-                Button(action: { service.effacerConversation() }) {
-                    Image(systemName: "trash")
-                        .foregroundColor(.gray)
-                }
-                .buttonStyle(.plain)
-                .help("Effacer la conversation")
-
-                // Bouton fermer
-                Button(action: { withAnimation(.spring()) { estVisible = false } }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.gray)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.black.opacity(0.3))
-
-            // --- SELECTEUR DE MODELE ---
-            HStack(spacing: 8) {
-                ForEach(ModeleIA.allCases, id: \.self) { modele in
-                    Button(action: {
-                        modeleChoisi = modele
-                        service.effacerConversation()
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: modele == .chatgpt ? "brain" : "sparkles")
-                                .font(.caption)
-                            Text(modele.rawValue)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            modeleChoisi == modele
-                                ? (modele == .chatgpt ? Color.green.opacity(0.3) : Color.blue.opacity(0.3))
-                                : Color.white.opacity(0.05)
-                        )
-                        .foregroundColor(
-                            modeleChoisi == modele
-                                ? (modele == .chatgpt ? .green : .cyan)
-                                : .gray
-                        )
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(
-                                    modeleChoisi == modele
-                                        ? (modele == .chatgpt ? Color.green.opacity(0.5) : Color.cyan.opacity(0.5))
-                                        : Color.clear,
-                                    lineWidth: 1
-                                )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            ChatbotSelecteurModele(
+                modeleChoisi: $modeleChoisi,
+                onChangement: { service.effacerConversation() }
+            )
 
             Divider().background(Color.gray.opacity(0.3))
 
-            // --- ZONE DE MESSAGES ---
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        if service.messages.isEmpty {
-                            VStack(spacing: 12) {
-                                Image(systemName: "bubble.left.and.bubble.right")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.gray.opacity(0.4))
-                                Text("Posez une question a \(modeleChoisi.rawValue)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray.opacity(0.6))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
-                        }
-
-                        ForEach(service.messages) { message in
-                            BulleMessage(message: message, modele: modeleChoisi)
-                                .id(message.id)
-                        }
-
-                        if service.enChargement {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
-                                Text("\(modeleChoisi.rawValue) reflechit...")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .id("chargement")
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                }
-                .onChange(of: service.messages.count) { _ in
-                    withAnimation {
-                        if let dernier = service.messages.last {
-                            proxy.scrollTo(dernier.id, anchor: .bottom)
-                        } else if service.enChargement {
-                            proxy.scrollTo("chargement", anchor: .bottom)
-                        }
-                    }
-                }
-            }
+            ChatbotMessagesZone(
+                messages: service.messages,
+                enChargement: service.enChargement,
+                modeleChoisi: modeleChoisi
+            )
 
             Divider().background(Color.gray.opacity(0.3))
 
-            // --- ZONE DE SAISIE ---
-            HStack(spacing: 10) {
-                TextField("Ecrivez votre message...", text: $texteInput)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(Color.white.opacity(0.08))
-                    .cornerRadius(10)
-                    .foregroundColor(.white)
-                    .onSubmit { envoyerMessage() }
-
-                Button(action: { envoyerMessage() }) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.title3)
-                        .foregroundColor(texteInput.isEmpty ? .gray : .cyan)
-                        .rotationEffect(.degrees(45))
-                }
-                .buttonStyle(.plain)
-                .disabled(texteInput.isEmpty || service.enChargement)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            ChatbotSaisie(
+                texteInput: $texteInput,
+                enChargement: service.enChargement,
+                onEnvoyer: envoyerMessage
+            )
         }
         #if os(macOS)
         .background(
@@ -368,54 +410,40 @@ struct BulleMessage: View {
     var body: some View {
         HStack {
             if message.estUtilisateur { Spacer(minLength: 40) }
-
-            VStack(alignment: message.estUtilisateur ? .trailing : .leading, spacing: 4) {
-                if !message.estUtilisateur {
-                    HStack(spacing: 4) {
-                        Image(systemName: modele == .chatgpt ? "brain" : "sparkles")
-                            .font(.caption2)
-                        Text(modele.rawValue)
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.gray)
-                }
-
-                Text(message.contenu)
-                    .font(.body)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        message.estUtilisateur
-                            ? Color.cyan.opacity(0.25)
-                            : Color.white.opacity(0.08)
-                    )
-                    .cornerRadius(14)
-                    .textSelection(.enabled)
-            }
-
+            contenuBulle
             if !message.estUtilisateur { Spacer(minLength: 40) }
         }
     }
-}
 
-// MARK: - Effet Vitre (macOS)
-#if os(macOS)
-struct VisualEffectBlur: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-    let blendingMode: NSVisualEffectView.BlendingMode
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = .active
-        return view
+    private var contenuBulle: some View {
+        let alignement: HorizontalAlignment = message.estUtilisateur ? .trailing : .leading
+        return VStack(alignment: alignement, spacing: 4) {
+            if !message.estUtilisateur {
+                labelModele
+            }
+            texteBulle
+        }
     }
 
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
+    private var labelModele: some View {
+        HStack(spacing: 4) {
+            Image(systemName: modele == .chatgpt ? "brain" : "sparkles")
+                .font(.caption2)
+            Text(modele.rawValue)
+                .font(.caption2)
+        }
+        .foregroundColor(.gray)
+    }
+
+    private var texteBulle: some View {
+        let couleurFond: Color = message.estUtilisateur ? Color.cyan.opacity(0.25) : Color.white.opacity(0.08)
+        return Text(message.contenu)
+            .font(.body)
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(couleurFond)
+            .cornerRadius(14)
+            .textSelection(.enabled)
     }
 }
-#endif
