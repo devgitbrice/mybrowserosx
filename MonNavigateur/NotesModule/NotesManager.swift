@@ -18,6 +18,7 @@ public class NotesManager: ObservableObject {
     @Published var isAutoCorrectActive = true
     
     private var cancellables = Set<AnyCancellable>()
+    private var saveTimers: [UUID: Timer] = [:]
     
     var isRecording: Bool { dictationService.isRecording }
     var isTranscribing: Bool { dictationService.isTranscribing }
@@ -50,17 +51,28 @@ public class NotesManager: ObservableObject {
 
     // --- CHARGEMENT ---
     func chargerNotes() {
-        guard let url = URL(string: "\(Config.url)/rest/v1/site_notes_blocks?select=*&order=is_pinned.desc,order_index.asc") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.addValue("Bearer \(Config.key)", forHTTPHeaderField: "Authorization")
-        request.addValue(Config.key, forHTTPHeaderField: "apikey")
-        
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            if let data = data, let decoded = try? JSONDecoder().decode([NoteBlock].self, from: data) {
-                DispatchQueue.main.async { self.blocks = decoded }
-            }
-        }.resume()
+        // Flush les sauvegardes en attente avant de recharger
+        let hadPendingSaves = !saveTimers.isEmpty
+        for (_, timer) in saveTimers {
+            timer.fire()
+        }
+        saveTimers.removeAll()
+
+        // Petit délai pour laisser les PATCH en attente arriver au serveur
+        let delay: TimeInterval = hadPendingSaves ? 0.5 : 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard let url = URL(string: "\(Config.url)/rest/v1/site_notes_blocks?select=*&order=is_pinned.desc,order_index.asc") else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.addValue("Bearer \(Config.key)", forHTTPHeaderField: "Authorization")
+            request.addValue(Config.key, forHTTPHeaderField: "apikey")
+
+            URLSession.shared.dataTask(with: request) { data, _, _ in
+                if let data = data, let decoded = try? JSONDecoder().decode([NoteBlock].self, from: data) {
+                    DispatchQueue.main.async { self.blocks = decoded }
+                }
+            }.resume()
+        }
     }
     
     func chargerCategories() {
@@ -102,10 +114,11 @@ public class NotesManager: ObservableObject {
         let newNote = NoteBlock(id: UUID(), content: "Nouvelle note...", order_index: newIndex, category: catParDefaut)
 
         withAnimation { blocks.insert(newNote, at: 0) }
-        ajouterNoteBase(note: newNote) { [weak self] success in
-            if success {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self?.chargerNotes()
+        ajouterNoteBase(note: newNote) { success in
+            if !success {
+                print("❌ Échec création note, retry...")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    self?.ajouterNoteBase(note: newNote)
                 }
             }
         }
@@ -178,7 +191,12 @@ public class NotesManager: ObservableObject {
     }
     
     func sauvegarderContenu(id: UUID, content: String) {
-        updateField(id: id, field: "content", value: content)
+        // Debounce : annuler le timer précédent, sauvegarder après 0.5s sans frappe
+        saveTimers[id]?.invalidate()
+        saveTimers[id] = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
+            self?.saveTimers.removeValue(forKey: id)
+            self?.updateField(id: id, field: "content", value: content)
+        }
     }
     
     func supprimerNote(id: UUID) {
@@ -230,8 +248,21 @@ public class NotesManager: ObservableObject {
         guard let url = URL(string: "\(Config.url)/rest/v1/site_notes_blocks?id=eq.\(id.uuidString)") else { return }
         var request = URLRequest(url: url); request.httpMethod = "PATCH"
         request.addValue("Bearer \(Config.key)", forHTTPHeaderField: "Authorization"); request.addValue(Config.key, forHTTPHeaderField: "apikey"); request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = [field: value]; do { request.httpBody = try JSONSerialization.data(withJSONObject: body) } catch {}
-        URLSession.shared.dataTask(with: request).resume()
+        let body = [field: value]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            print("❌ Erreur sérialisation \(field): \(error)")
+            return
+        }
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error = error {
+                print("❌ Erreur réseau updateField(\(field)): \(error.localizedDescription)")
+            }
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 300 {
+                print("❌ Erreur HTTP updateField(\(field)): status \(httpResponse.statusCode)")
+            }
+        }.resume()
     }
     
     func declencherCorrectionAuto(pour id: UUID, contenuActuel: String) {
