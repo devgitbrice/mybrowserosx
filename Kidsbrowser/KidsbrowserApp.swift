@@ -11,7 +11,9 @@ import SwiftUI
 struct KidsbrowserApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // AVANT : ContentView()
+            // MAINTENANT :
+            ProfileSelectionView()
         }
     }
 }
