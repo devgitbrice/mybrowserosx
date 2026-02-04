@@ -4,7 +4,8 @@ import AppKit
 struct BlocNotesView: View {
     @ObservedObject var notesManager: NotesManager
     @Binding var estVisible: Bool
-    
+    @Binding var estVerrouille: Bool
+
     @State private var showingAddCategory = false
     @State private var newCategoryName = ""
     
@@ -49,10 +50,18 @@ struct BlocNotesView: View {
                 Button(action: { notesManager.ajouterNote() }) {
                     Image(systemName: "plus").foregroundColor(.white).padding(6).background(Color.indigo).clipShape(Circle())
                 }.buttonStyle(.plain)
-                
-                Button(action: { withAnimation { estVisible = false } }) {
+
+                Button(action: { withAnimation { estVerrouille.toggle() } }) {
+                    Image(systemName: estVerrouille ? "lock.fill" : "lock.open")
+                        .font(.title3)
+                        .foregroundColor(estVerrouille ? .orange : .gray)
+                }
+                .buttonStyle(.plain).padding(.leading, 8)
+                .help(estVerrouille ? "Déverrouiller le panneau" : "Verrouiller le panneau ouvert")
+
+                Button(action: { withAnimation { estVisible = false; estVerrouille = false } }) {
                     Image(systemName: "xmark.circle.fill").font(.title3).foregroundColor(.gray)
-                }.buttonStyle(.plain).padding(.leading, 8)
+                }.buttonStyle(.plain).padding(.leading, 4)
             }
             .padding().background(Color(red: 0.1, green: 0.1, blue: 0.12))
             
