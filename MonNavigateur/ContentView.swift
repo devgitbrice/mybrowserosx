@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var sidebarVisible = false
     @State private var afficherBlocNotes = false
     @State private var blocNotesVerrouille = false
+    @State private var afficherChatbot = false
     
     let minuteur = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
 
@@ -157,6 +158,53 @@ struct ContentView: View {
                     #endif
             }
             
+            // --- COUCHE 8 : BOUTON ROBOT + CHATBOT ---
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+
+                    if afficherChatbot {
+                        ChatbotView(estVisible: $afficherChatbot)
+                            .frame(width: 380, height: 520)
+                            .transition(.scale(scale: 0.5, anchor: .bottomTrailing).combined(with: .opacity))
+                            .padding(.bottom, 70)
+                            .padding(.trailing, 16)
+                    }
+                }
+
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            afficherChatbot.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "cpu")
+                                .font(.title3)
+                            Text("ROBOT")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            afficherChatbot
+                                ? Color.red.opacity(0.8)
+                                : Color.cyan.opacity(0.8)
+                        )
+                        .cornerRadius(24)
+                        .shadow(color: (afficherChatbot ? Color.red : Color.cyan).opacity(0.4), radius: 8, x: 0, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 16)
+                }
+            }
+            .zIndex(200)
+
             Button("") { estBloque = false; jeuEstActif = false; print("🛑 KILL") }
                 .keyboardShortcut("s", modifiers: .command)
                 .frame(width: 0, height: 0)
