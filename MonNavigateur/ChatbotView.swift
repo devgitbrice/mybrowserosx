@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - Modele de message
 struct ChatMessage: Identifiable {
@@ -399,23 +400,4 @@ struct BulleMessage: View {
     }
 }
 
-// MARK: - Effet Vitre (macOS)
-#if os(macOS)
-struct VisualEffectBlur: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-    let blendingMode: NSVisualEffectView.BlendingMode
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
-    }
-}
-#endif
+// VisualEffectBlur est deja defini dans SideBar.swift
