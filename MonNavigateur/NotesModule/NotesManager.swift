@@ -140,7 +140,7 @@ public class NotesManager: ObservableObject {
         request.addValue(Config.key, forHTTPHeaderField: "apikey")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("return=minimal", forHTTPHeaderField: "Prefer")
-        let donnees = ["id": note.id!.uuidString, "content": note.content, "order_index": String(note.order_index), "category": note.category]
+        let donnees: [String: Any] = ["id": note.id!.uuidString, "content": note.content, "order_index": note.order_index, "is_pinned": note.is_pinned, "is_favorite": note.is_favorite, "category": note.category]
         do { request.httpBody = try JSONSerialization.data(withJSONObject: donnees, options: []) } catch {}
         URLSession.shared.dataTask(with: request).resume()
     }
