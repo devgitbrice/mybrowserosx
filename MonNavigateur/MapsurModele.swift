@@ -79,6 +79,7 @@ class NavigateurModele: NSObject, ObservableObject {
     override init() {
         super.init()
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         chargerLesFavoris()
         
         let obs1 = webView.observe(\.estimatedProgress, options: [.new]) { [weak self] webView, _ in
@@ -168,5 +169,15 @@ extension NavigateurModele: WKNavigationDelegate {
                 SupabaseManager.envoyerDonnees(table: "historique", donnees: donnees)
             }
         }
+    }
+}
+
+extension NavigateurModele: WKUIDelegate {
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        // Gérer les liens target="_blank" et window.open() en les chargeant dans le webView actuel
+        if navigationAction.targetFrame == nil || !(navigationAction.targetFrame!.isMainFrame) {
+            webView.load(navigationAction.request)
+        }
+        return nil
     }
 }
