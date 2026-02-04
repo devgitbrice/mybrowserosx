@@ -105,7 +105,7 @@ struct ContentView: View {
             
             // --- COUCHE 3 : DÉTECTEUR SIDEBAR ---
             if !sidebarVisible {
-                Rectangle().fill(Color.clear).frame(width: 50).contentShape(Rectangle())
+                Rectangle().fill(Color.clear).frame(width: 1).contentShape(Rectangle())
                     .onHover { isHovering in if isHovering { withAnimation(.spring()) { sidebarVisible = true } } }
                     .zIndex(2)
             }
